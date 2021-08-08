@@ -1,0 +1,25 @@
+---
+title: "Proteomics"
+author: "Syed Shahzaib Ali"
+date: "10/06/2021"
+output: html_document
+---
+
+# Loading Libraries
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(reshape2)
+library(matrixTests)
+library(tidyverse)
+library(GGally)
+library(factoextra)
+library(plotly)
+library(corrplot)
+library(gplots)
+library(GO.db)
+library(seqinr)
+library(Biostrings)
+library(ggseqlogo)
+```
