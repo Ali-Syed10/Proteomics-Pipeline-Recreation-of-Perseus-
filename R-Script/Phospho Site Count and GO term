@@ -1,0 +1,109 @@
+Red = Protein.data.set
+
+Red = Red %>% mutate (Site.Count = str_count(Edit.Data$sequence_match, "R..S|R..T|R..Y"))
+
+Site.0 = Red[Red$Site.Count == 0,]
+colnames(Site.0)[3] = "New.Sites"
+Site.1 = Red[Red$Site.Count == 1,]
+colnames(Site.1)[3] = "New.Sites"
+Site.2 = Red[Red$Site.Count == 2,]
+colnames(Site.2)[3] = "New.Sites"
+Site.3 = Red[Red$Site.Count == 3,]
+colnames(Site.3)[3] = "New.Sites"
+Site.4 = Red[Red$Site.Count == 4,]
+colnames(Site.4)[3] = "New.Sites"
+Site.5 = Red[Red$Site.Count == 5,]
+colnames(Site.5)[3] = "New.Sites"
+Site.6 = Red[Red$Site.Count == 6,]
+colnames(Site.6)[3] = "New.Sites"
+Site.7 = Red[Red$Site.Count > 6,]
+colnames(Site.7)[3] = "New.Sites"
+
+
+Red.new.1 = str_extract_all(Site.1$New.Sites, "A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|X|Y|Z")
+Red.new.2 = str_extract_all(Site.2$New.Sites, "A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|X|Y|Z")
+Red.new.3 = str_extract_all(Site.3$New.Sites, "A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|X|Y|Z")
+Red.new.4 = str_extract_all(Site.4$New.Sites, "A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|X|Y|Z")
+Red.new.5 = str_extract_all(Site.5$New.Sites, "A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|X|Y|Z")
+Red.new.6 = str_extract_all(Site.6$New.Sites, "A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|X|Y|Z")
+Red.new.7 = str_extract_all(Site.7$New.Sites, "A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|X|Y|Z")
+
+Site.11 = unlist(Red.new.1)
+Site.22 = unlist(Red.new.2)
+Site.33 = unlist(Red.new.3)
+Site.44 = unlist(Red.new.4)
+Site.55 = unlist(Red.new.5)
+Site.66 = unlist(Red.new.6)
+Site.77 = unlist(Red.new.7)
+
+Site.11 = as.data.frame(table(Site.11))
+colnames(Site.11) = c("Sites", "Freq")
+Site.11$Type = "Site Count One"
+Site.11$Percentage = (Site.11$Freq / sum(Site.11$Freq))*100
+
+F.1 = rbind(Site.11[Site.11$Sites == "S",], Site.11[Site.11$Sites == "Y",], Site.11[Site.11$Sites == "T",])
+
+
+Site.22 = as.data.frame(table(Site.22))
+colnames(Site.22) = c("Sites", "Freq")
+Site.22$Type = "Site Count Two"
+Site.22$Percentage = (Site.22$Freq / sum(Site.22$Freq))*100
+
+F.2 = rbind(Site.22[Site.22$Sites == "S",], Site.22[Site.22$Sites == "Y",], Site.22[Site.22$Sites == "T",])
+
+Site.33 = as.data.frame(table(Site.33))
+colnames(Site.33) = c("Sites", "Freq")
+Site.33$Type = "Site Count Three"
+Site.33$Percentage = (Site.33$Freq / sum(Site.33$Freq))*100
+
+F.3 = rbind(Site.33[Site.33$Sites == "S",], Site.33[Site.33$Sites == "Y",], Site.33[Site.33$Sites == "T",])
+
+
+Site.44 = as.data.frame(table(Site.44))
+colnames(Site.44) = c("Sites", "Freq")
+Site.44$Type = "Site Count Four"
+Site.44$Percentage = (Site.44$Freq / sum(Site.44$Freq))*100
+
+F.4 = rbind(Site.44[Site.44$Sites == "S",], Site.44[Site.44$Sites == "Y",], Site.44[Site.44$Sites == "T",])
+
+
+Site.55 = as.data.frame(table(Site.55))
+colnames(Site.55) = c("Sites", "Freq")
+Site.55$Type = "Site Count Five"
+Site.55$Percentage = (Site.55$Freq / sum(Site.55$Freq))*100
+
+F.5 = rbind(Site.55[Site.55$Sites == "S",], Site.55[Site.55$Sites == "Y",], Site.55[Site.55$Sites == "T",])
+
+
+Site.66 = as.data.frame(table(Site.66))
+colnames(Site.66) = c("Sites", "Freq")
+Site.66$Type = "Site Count Six"
+Site.66$Percentage = (Site.66$Freq / sum(Site.66$Freq))*100
+
+F.6 = rbind(Site.66[Site.66$Sites == "S",], Site.66[Site.66$Sites == "Y",], Site.66[Site.66$Sites == "T",])
+
+Site.77 = as.data.frame(table(Site.77))
+colnames(Site.77) = c("Sites", "Freq")
+Site.77$Type = "Site Count Seven"
+Site.77$Percentage = (Site.77$Freq / sum(Site.77$Freq))*100
+
+
+F.7 = rbind(Site.77[Site.77$Sites == "S",], Site.77[Site.77$Sites == "Y",], Site.77[Site.77$Sites == "T",])
+
+F.8 = rbind(Site.11, Site.22, Site.33, Site.44, Site.55, Site.66, Site.77 )
+
+# Renaming of Protein_ID columns to Entry for merging of dataframe with gene ontology file from uniprot
+
+
+colnames(Site.0)[2] = "Entry"
+colnames(Site.1)[2] = "Entry"
+colnames(Site.2)[2] = "Entry"
+colnames(Site.3)[2] = "Entry"
+colnames(Site.4)[2] = "Entry"
+colnames(Site.5)[2] = "Entry"
+colnames(Site.6)[2] = "Entry"
+colnames(Site.7)[2] = "Entry"
+
+# Read the gene ontology csv file downloaded from uniprot
+
+```
