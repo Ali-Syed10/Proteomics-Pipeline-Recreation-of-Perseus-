@@ -1,0 +1,15 @@
+# Upload these packages 
+
+library(ggplot2)
+library(reshape2)
+library(matrixTests)
+library(tidyverse)
+library(GGally)
+library(factoextra)
+library(plotly)
+library(corrplot)
+library(gplots)
+library(GO.db)
+library(seqinr)
+library(Biostrings)
+library(ggseqlogo)
