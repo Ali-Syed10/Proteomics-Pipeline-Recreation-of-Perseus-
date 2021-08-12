@@ -1,0 +1,592 @@
+# Upload MaxQuant "proteingroups.txt" file in this and run the script. 
+
+# Note: Remember this script is for label free proteomics so you should have LFQ intensities columns in the file
+
+Protein.Data = read.delim(file.choose(), sep = "\t")
+Protein.Data.Impute = impute_normal(Protein.Data)
+Protein.Data.Impute$Reverse[is.na(Protein.Data.Impute$Reverse)] <- ''
+Protein.Data.Impute$Potential.contaminant[is.na(Protein.Data.Impute$Potential.contaminant)] <- ''
+Processed.Data <- Protein.Data.Impute[which(Protein.Data.Impute$Potential.contaminant != '+' & Protein.Data.Impute$Reverse != '+'),]
+
+# Part 1: Calculating and Visualizing Pre-filtered Data (removal of contaminants) 
+
+Al = cbind(dim(Protein.Data)[1], dim(Processed.Data)[1])
+Al = as.data.frame(Al)
+colnames(Al) = c("Pre-Filtered", "Filtered")
+rownames(Al) = c("Count")
+Al  = melt(Al)
+ggplot(Al, aes(x=variable, y = value, fill = variable), width=0.9) + geom_bar(stat="identity", width = 0.1)
+ggsave("fill.png")
+
+# Part 2: Visualizing correlation through ggpairs
+
+Pr = Processed.Data[ , grepl( "LFQ.intensity." , names(Processed.Data) ) ]
+ggpairs(Pr)
+
+#Part 3: Visualizing Missing Values (Proteins that are identified but not quantified)
+
+Pr = Protein.Data[ , grepl( "LFQ.intensity." , names(Protein.Data) ) ]
+Missing = colSums(Pr == 0)
+Missing = as.data.frame(Missing)
+Missing = melt(Missing)
+Missing$variable = colnames(Pr)
+ggplot(Missing, aes(x=variable, y = value, fill = variable), width=0.9) + geom_bar(stat="identity", width = 0.2) + scale_x_discrete(guide = guide_axis(n.dodge=2))
+
+# Part 4: Unique Peptide Distribution (Using functions I built) Note: Remember to upload functions otherwise will not operate
+
+Unique.Peptide.Distribution(Processed.Data)
+
+#Part 5: Length of Sequences Distribution (Important information for alignment if necessary)
+
+Sequence.Length.Distribution(Processed.Data)
+
+#Part 6: Score Distribution 
+
+Score.Distribution(Processed.Data)
+
+#Part 7: Sequence Coverage (Quality Checks)
+
+Seq.Coverage.Comparison(Processed.Data)
+
+#Part 8: Visualizing LFQ intensities as a boxplot for proof of normalization and extraction of outliers to check if the significant proteins are outliers or not
+
+LFQ.Comparison(Processed.Data)
+Pr = Processed.Data[ , grepl( c("LFQ.") , names(Processed.Data) ) ]
+Col = colnames(Pr)
+dat.m <- melt(Pr,id.vars= Col, measure.vars= Col)
+dat.m$Protein_ID = rep(Processed.Data$Majority.protein.IDs, length(Col))
+lower_bound <- quantile(dat.m$value, 0.025)
+Upper_bound <- quantile(dat.m$value, 0.975)
+outlier_ind <- which(dat.m$value < lower_bound | dat.m$value > Upper_bound)
+save = dat.m[outlier_ind,]
+variable = as.character(save$variable)
+save.1 = as.data.frame(cbind(variable, save$value, save$Protein_ID))
+length(unique(save$Protein_ID))
+colnames(save.1) = c("Sample", "Value", "Protein_ID")
+View(save.1)
+
+#Part 9: Correlation Visualization in two formats of samples
+
+p = cor(Pr)
+corrplot(p, method = "color", order = "hclust")
+heatmap(p, margins = c(12,8))
+
+#Part 10: Visualizing Proteins Compositon through heatmaps
+
+Pr = Processed.Data[ , grepl( c("LFQ.") , names(Processed.Data) ) ]
+rownames(Pr) = Processed.Data[ , grepl( c("Majority.") , names(Processed.Data) ) ]
+Pr = as.matrix(Pr)
+class(Pr)
+col = c("#FF0000", "#FF0000", "#FF0000")
+par(mar=c(7,4,4,2)+0.1) 
+png(filename='test.png', width=800, height=750)
+heatmap.2(Pr, col=redgreen(75), scale="row" , key=TRUE, symkey=FALSE, density.info="none",cexRow=1,cexCol=1,margins=c(12,8),trace="none",srtCol=45)
+
+# Part 11: Volcano Plot Produciton 
+
+Protein.LFQ = Processed.Data[ , grepl( c("LFQ.") , names(Processed.Data) ) ]
+rownames(Protein.LFQ) = Processed.Data[ , grepl( c("Majority.") , names(Processed.Data) ) ]
+WTDF = Protein.LFQ[,1:4]
+MTDF = Protein.LFQ[,5:8]
+Final = Prot.stat(MTDF, WTDF)
+Protein.sig = Final[Final$P.ad < 0.05,]
+de <- merge(Protein.LFQ, Protein.sig, by=0, all=TRUE)
+de = na.omit(de)
+rownames(de) = de$Row.names
+plot_ly(data = Final, x = Final$log.fold.change, y = Final$P.val.log, text = rownames(Final), color = Final$P.ad ) %>%  layout(title ="Volcano Plot") %>% layout(annotations = a)
+
+#### Part 12: Extracting Site Sequences of Protein in Question. In this Example is 
+
+Sites. In addition, Weblogo of phospho site 
+
+# Create DNA string set
+
+Fasta.1 = read.fasta(file.choose(), as.string = TRUE, forceDNAtolower = FALSE)
+
+Fasta.1 = unlist(Fasta.1)
+
+Fasta.1 = as.data.frame(Fasta.1)
+
+# Read the fasta file 
+
+DNA.fasta = readDNAStringSet(file.choose(), format =  "fasta")
+
+# Convert DNA string set into a data frame which then can be used to edit the names 
+
+DNA.data <- as.data.frame(DNA.fasta) # Conversion to data frame
+
+DNA.data$x = Fasta.1$Fasta.1 #Reassignment of columns
+
+colnames(DNA.data) = "Seq" # Renaming of columns
+
+Edit.Data = DNA.data %>% mutate(sequence_match = str_match_all(Seq, "R..S|R..T|R..Y")) # Extract phosphorecognition sequences
+
+Seq_mat = sapply(Edit.Data$sequence_match, function(x) paste(unlist(x), collapse = " ")) #Remove spaces between names
+
+Edit.Data$sequence_match = Seq_mat #Reassign the names to the current column
+
+
+Data.232S <- word(rownames(DNA.data), 2L, 3L) # This will extract the protein names
+
+Data.23S <- word(rownames(DNA.data), 1L, 1L) # This is to extract protein ids
+
+Data.23S <- gsub("^tr|", " ",Data.23S ) # Protein ids are not a clean extract thus further data manipulation is required
+
+New.data = as.data.frame(Data.23S,Data.232S ) 
+
+Protein.id.new = New.data[1:28,] # Some of the proteins id still have a unneccesary symbols with them. Thus further removal is required. The first 28 rows manipulation will be done seperately as they are different from the rest. 
+
+Protein.id.new.1 <- word(Protein.id.new,5L, 10L) # Clean extraction of protein ids
+
+Protein.id.new.2 = Data.232S[1:28] # The first 28 proteins have to be edited more thoroughly 
+
+Final.X1 = cbind(Protein.id.new.2, Protein.id.new.1) # Mergeing the two objects into a dataframe
+
+Dat.2 = New.data[-(1:28),] # All the protein names other than the first 28 rows are edited 
+
+Name.1 <- word(Dat.2,3L, 8L) # Editing of names
+
+Dat.3 = as.data.frame(Name.1) # Replacement of names
+
+Protein.id.new.3 = Data.232S[-(1:28)] 
+
+Dat.4 = cbind(Protein.id.new.3,Name.1)
+Final.X = rbind(Final.X1,Dat.4)
+Final.X = data.frame(Final.X)
+colnames(Final.X) = c("Protein_Name", "Proteins")
+
+Final.X = as.data.frame(apply(Final.X,2,function(x)gsub('\\s+', '',x))) 
+
+Protein.data.set = cbind(Final.X, Edit.Data$sequence_match) 
+
+Web = Protein.data.set$`Edit.Data$sequence_match`
+
+Web = strsplit(er, "\\s+")
+
+Web = unlist(Web)
+
+ggseqlogo(Web, method = "prob") # Create Web Logo
+
+
+Red = Protein.data.set
+
+Red = Red %>% mutate (Site.Count = str_count(Edit.Data$sequence_match, "R..S|R..T|R..Y"))
+
+write.csv(Red, "Protein_Site_Data.csv")
+
+hist(Red$Site.Count)
+
+
+#### Part 13: Proteins grouped by number of Phosphrylation sites found, phosphorylation being by kinase of interest 
+
+Site.0 = Red[Red$Site.Count == 0,]
+colnames(Site.0)[3] = "New.Sites"
+Site.1 = Red[Red$Site.Count == 1,]
+colnames(Site.1)[3] = "New.Sites"
+Site.2 = Red[Red$Site.Count == 2,]
+colnames(Site.2)[3] = "New.Sites"
+Site.3 = Red[Red$Site.Count == 3,]
+colnames(Site.3)[3] = "New.Sites"
+Site.4 = Red[Red$Site.Count == 4,]
+colnames(Site.4)[3] = "New.Sites"
+Site.5 = Red[Red$Site.Count == 5,]
+colnames(Site.5)[3] = "New.Sites"
+Site.6 = Red[Red$Site.Count == 6,]
+colnames(Site.6)[3] = "New.Sites"
+Site.7 = Red[Red$Site.Count > 6,]
+colnames(Site.7)[3] = "New.Sites"
+
+
+Red.new.1 = str_extract_all(Site.1$New.Sites, "A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|X|Y|Z")
+Red.new.2 = str_extract_all(Site.2$New.Sites, "A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|X|Y|Z")
+Red.new.3 = str_extract_all(Site.3$New.Sites, "A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|X|Y|Z")
+Red.new.4 = str_extract_all(Site.4$New.Sites, "A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|X|Y|Z")
+Red.new.5 = str_extract_all(Site.5$New.Sites, "A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|X|Y|Z")
+Red.new.6 = str_extract_all(Site.6$New.Sites, "A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|X|Y|Z")
+Red.new.7 = str_extract_all(Site.7$New.Sites, "A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|X|Y|Z")
+
+Site.11 = unlist(Red.new.1)
+Site.22 = unlist(Red.new.2)
+Site.33 = unlist(Red.new.3)
+Site.44 = unlist(Red.new.4)
+Site.55 = unlist(Red.new.5)
+Site.66 = unlist(Red.new.6)
+Site.77 = unlist(Red.new.7)
+
+Site.11 = as.data.frame(table(Site.11))
+colnames(Site.11) = c("Sites", "Freq")
+Site.11$Type = "Site Count One"
+Site.11$Percentage = (Site.11$Freq / sum(Site.11$Freq))*100
+
+F.1 = rbind(Site.11[Site.11$Sites == "S",], Site.11[Site.11$Sites == "Y",], Site.11[Site.11$Sites == "T",])
+
+
+Site.22 = as.data.frame(table(Site.22))
+colnames(Site.22) = c("Sites", "Freq")
+Site.22$Type = "Site Count Two"
+Site.22$Percentage = (Site.22$Freq / sum(Site.22$Freq))*100
+
+F.2 = rbind(Site.22[Site.22$Sites == "S",], Site.22[Site.22$Sites == "Y",], Site.22[Site.22$Sites == "T",])
+
+Site.33 = as.data.frame(table(Site.33))
+colnames(Site.33) = c("Sites", "Freq")
+Site.33$Type = "Site Count Three"
+Site.33$Percentage = (Site.33$Freq / sum(Site.33$Freq))*100
+
+F.3 = rbind(Site.33[Site.33$Sites == "S",], Site.33[Site.33$Sites == "Y",], Site.33[Site.33$Sites == "T",])
+
+
+Site.44 = as.data.frame(table(Site.44))
+colnames(Site.44) = c("Sites", "Freq")
+Site.44$Type = "Site Count Four"
+Site.44$Percentage = (Site.44$Freq / sum(Site.44$Freq))*100
+
+F.4 = rbind(Site.44[Site.44$Sites == "S",], Site.44[Site.44$Sites == "Y",], Site.44[Site.44$Sites == "T",])
+
+
+Site.55 = as.data.frame(table(Site.55))
+colnames(Site.55) = c("Sites", "Freq")
+Site.55$Type = "Site Count Five"
+Site.55$Percentage = (Site.55$Freq / sum(Site.55$Freq))*100
+
+F.5 = rbind(Site.55[Site.55$Sites == "S",], Site.55[Site.55$Sites == "Y",], Site.55[Site.55$Sites == "T",])
+
+
+Site.66 = as.data.frame(table(Site.66))
+colnames(Site.66) = c("Sites", "Freq")
+Site.66$Type = "Site Count Six"
+Site.66$Percentage = (Site.66$Freq / sum(Site.66$Freq))*100
+
+F.6 = rbind(Site.66[Site.66$Sites == "S",], Site.66[Site.66$Sites == "Y",], Site.66[Site.66$Sites == "T",])
+
+Site.77 = as.data.frame(table(Site.77))
+colnames(Site.77) = c("Sites", "Freq")
+Site.77$Type = "Site Count Seven"
+Site.77$Percentage = (Site.77$Freq / sum(Site.77$Freq))*100
+
+
+F.7 = rbind(Site.77[Site.77$Sites == "S",], Site.77[Site.77$Sites == "Y",], Site.77[Site.77$Sites == "T",])
+
+F.8 = rbind(Site.11, Site.22, Site.33, Site.44, Site.55, Site.66, Site.77 )
+
+# Renaming of Protein_ID columns to Entry for merging of dataframe with gene ontology file from uniprot
+
+
+colnames(Site.0)[2] = "Entry"
+colnames(Site.1)[2] = "Entry"
+colnames(Site.2)[2] = "Entry"
+colnames(Site.3)[2] = "Entry"
+colnames(Site.4)[2] = "Entry"
+colnames(Site.5)[2] = "Entry"
+colnames(Site.6)[2] = "Entry"
+colnames(Site.7)[2] = "Entry"
+
+# Read the gene ontology csv file downloaded from uniprot
+
+```
+
+# In this Step Gene Ontology Terms are extracted. CSV file from uniprot by using the protein names are extracted, 
+please make sure that the gene id have also been extracted from uniprot. This can be done by selecting the go term id option along with everything else. 
+The Go.db package above uploaded will be used for this step. The terms are represened according to sites and then according to fold change where positive 
+is abundant in mutant and decreased in comparison to wild type. 
+
+```{r}
+
+FGK = read.csv(file.choose()) # Read uniprotfile of gene ontology terms
+
+Test.1 = merge.data.frame(FGK, Site.0, by = "Entry")
+Test.1 = strsplit(Test.1$Gene.ontology.IDs, ";")
+Test.1 = unlist(Test.1)
+Test.2 = Term(Test.1)
+Test.3 = Ontology(Test.1)
+Final.test = data.frame(Test.1, Test.2, Test.3)
+
+Molecular.functions = Final.test[Final.test$Test.3 == "MF", ]
+
+Molecular.functions = na.omit(Molecular.functions)
+
+Molecular.functions = Molecular.functions %>% mutate(match = str_extract(Test.2, "ATP binding|DNA binding|hydrolase activity|activity|binding|oxidoreductase activity|protein|ribosome|RNA binding|rRNA|transcription|transferase|translation"))
+
+Molecular.functions = data.frame(table(Molecular.functions$match))
+Molecular.functions$type = "No of Sites 0"
+
+Sit.0 = Molecular.functions
+
+
+Test.1 = merge.data.frame(FGK, Site.1, by = "Entry")
+Test.1 = strsplit(Test.1$Gene.ontology.IDs, ";")
+Test.1 = unlist(Test.1)
+Test.2 = Term(Test.1)
+Test.3 = Ontology(Test.1)
+Final.test = data.frame(Test.1, Test.2, Test.3)
+
+Molecular.functions = Final.test[Final.test$Test.3 == "MF", ]
+
+Molecular.functions = na.omit(Molecular.functions)
+
+Molecular.functions = Molecular.functions %>% mutate(match = str_extract(Test.2, "ATP binding|DNA binding|hydrolase activity|activity|binding|oxidoreductase activity|protein|ribosome|RNA binding|rRNA|transcription|transferase|translation"))
+
+Molecular.functions = data.frame(table(Molecular.functions$match))
+Molecular.functions$type = "No of Sites 1"
+
+Sit.1 = Molecular.functions
+
+
+
+
+Test.1 = merge.data.frame(FGK, Site.2, by = "Entry")
+Test.1 = strsplit(Test.1$Gene.ontology.IDs, ";")
+Test.1 = unlist(Test.1)
+Test.2 = Term(Test.1)
+Test.3 = Ontology(Test.1)
+Final.test = data.frame(Test.1, Test.2, Test.3)
+
+Molecular.functions = Final.test[Final.test$Test.3 == "MF", ]
+
+Molecular.functions = na.omit(Molecular.functions)
+
+Molecular.functions = Molecular.functions %>% mutate(match = str_extract(Test.2, "ATP binding|DNA binding|hydrolase activity|activity|binding|oxidoreductase activity|protein|ribosome|RNA binding|rRNA|transcription|transferase|translation"))
+
+Molecular.functions = data.frame(table(Molecular.functions$match))
+Molecular.functions$type = "No of Sites 2"
+
+Sit.2 = Molecular.functions
+
+
+
+
+Test.1 = merge.data.frame(FGK, Site.3, by = "Entry")
+Test.1 = strsplit(Test.1$Gene.ontology.IDs, ";")
+Test.1 = unlist(Test.1)
+Test.2 = Term(Test.1)
+Test.3 = Ontology(Test.1)
+Final.test = data.frame(Test.1, Test.2, Test.3)
+
+Molecular.functions = Final.test[Final.test$Test.3 == "MF", ]
+
+Molecular.functions = na.omit(Molecular.functions)
+
+Molecular.functions = Molecular.functions %>% mutate(match = str_extract(Test.2, "ATP binding|DNA binding|hydrolase activity|activity|binding|oxidoreductase activity|protein|ribosome|RNA binding|rRNA|transcription|transferase|translation"))
+
+Molecular.functions = data.frame(table(Molecular.functions$match))
+Molecular.functions$type = "No of Sites 3"
+
+Sit.3 = Molecular.functions
+
+
+
+
+Test.1 = merge.data.frame(FGK, Site.4, by = "Entry")
+Test.1 = strsplit(Test.1$Gene.ontology.IDs, ";")
+Test.1 = unlist(Test.1)
+Test.2 = Term(Test.1)
+Test.3 = Ontology(Test.1)
+Final.test = data.frame(Test.1, Test.2, Test.3)
+
+Molecular.functions = Final.test[Final.test$Test.3 == "MF", ]
+
+Molecular.functions = na.omit(Molecular.functions)
+
+Molecular.functions = Molecular.functions %>% mutate(match = str_extract(Test.2, "ATP binding|DNA binding|hydrolase activity|activity|binding|oxidoreductase activity|protein|ribosome|RNA binding|rRNA|transcription|transferase|translation"))
+
+Molecular.functions = data.frame(table(Molecular.functions$match))
+Molecular.functions$type = "No of Sites 4"
+
+Sit.4 = Molecular.functions
+
+
+
+Test.1 = merge.data.frame(FGK, Site.5, by = "Entry")
+Test.1 = strsplit(Test.1$Gene.ontology.IDs, ";")
+Test.1 = unlist(Test.1)
+Test.2 = Term(Test.1)
+Test.3 = Ontology(Test.1)
+Final.test = data.frame(Test.1, Test.2, Test.3)
+
+Molecular.functions = Final.test[Final.test$Test.3 == "MF", ]
+
+Molecular.functions = na.omit(Molecular.functions)
+
+Molecular.functions = Molecular.functions %>% mutate(match = str_extract(Test.2, "ATP binding|DNA binding|hydrolase activity|activity|binding|oxidoreductase activity|protein|ribosome|RNA binding|rRNA|transcription|transferase|translation"))
+
+Molecular.functions = data.frame(table(Molecular.functions$match))
+Molecular.functions$type = "No of Sites 5"
+
+Sit.5 = Molecular.functions
+
+
+
+
+Test.1 = merge.data.frame(FGK, Site.6, by = "Entry")
+Test.1 = strsplit(Test.1$Gene.ontology.IDs, ";")
+Test.1 = unlist(Test.1)
+Test.2 = Term(Test.1)
+Test.3 = Ontology(Test.1)
+Final.test = data.frame(Test.1, Test.2, Test.3)
+
+Molecular.functions = Final.test[Final.test$Test.3 == "MF", ]
+
+Molecular.functions = na.omit(Molecular.functions)
+
+Molecular.functions = Molecular.functions %>% mutate(match = str_extract(Test.2, "ATP binding|DNA binding|hydrolase activity|activity|binding|oxidoreductase activity|protein|ribosome|RNA binding|rRNA|transcription|transferase|translation"))
+
+Molecular.functions = data.frame(table(Molecular.functions$match))
+Molecular.functions$type = "No of Sites 6"
+
+Sit.6 = Molecular.functions
+
+
+Test.1 = merge.data.frame(FGK, Site.7, by = "Entry")
+Test.1 = strsplit(Test.1$Gene.ontology.IDs, ";")
+Test.1 = unlist(Test.1)
+Test.2 = Term(Test.1)
+Test.3 = Ontology(Test.1)
+Final.test = data.frame(Test.1, Test.2, Test.3)
+
+Molecular.functions = Final.test[Final.test$Test.3 == "MF", ]
+
+Molecular.functions = na.omit(Molecular.functions)
+
+Molecular.functions = Molecular.functions %>% mutate(match = str_extract(Test.2, "ATP binding|DNA binding|hydrolase activity|activity|binding|oxidoreductase activity|protein|ribosome|RNA binding|rRNA|transcription|transferase|translation"))
+
+Molecular.functions = data.frame(table(Molecular.functions$match))
+Molecular.functions$type = "No of Sites 7"
+
+Sit.7 = Molecular.functions
+
+Combined.Site.Data = rbind(Sit.0, Sit.1, Sit.2, Sit.3, Sit.4, Sit.5, Sit.6, Sit.7)
+
+write.csv(Combined.Site.Data, "Combined.csv")
+
+
+#Part 14: Gene Ontology Terms Defined by Log fold change
+
+Max.Protein.0 = read.delim(file.choose()) # Read MAxquant protein file
+
+Max.Protein = Max.Protein.0[ , grepl( c("LFQ.") , names(Max.Protein.0) ) ] # Extract LFQ intensities columns
+
+Max.Protein = impute_normal(Max.Protein) # log and impute values
+
+Max.Protein.1 = Max.Protein[ , grepl( c("LFQ.intensity.PK") , names(Max.Protein) ) ]  # Extract Mutant Type LFQ, may need to specify the columns if names are defined as .PK
+
+Max.Protein.1 = apply(Max.Protein.1,1, function(x) mean(x)) #calculate means for each protein across samples
+
+Max.Protein.2 = Max.Protein[ , grepl( c("LFQ.intensity.WT") , names(Max.Protein) ) ]  # Extract Wild Type LFQ, may need to specify the columns if names are defined as .WT
+
+Max.Protein.2 = apply(Max.Protein.2,1, function(x) mean(x))  #calculate means for each protein across samples
+
+Max.Protein.3 = data.frame(Max.Protein.0$Majority.protein.IDs,Max.Protein.1,Max.Protein.2)
+
+Max.Protein.4 = Max.Protein.3 %>% mutate(name=strsplit(Max.Protein.0.Majority.protein.IDs, ";")) 
+
+Max.Protein.4 = unnest(Max.Protein.4) # Makes the duplicates for protein ids that are present as a double in maxquant output. But the LFQ mean intensities will be the same thus bias for these small proteins
+
+Max.Protein.4 = data.frame(Max.Protein.4$name, Max.Protein.4$Max.Protein.1, Max.Protein.4$Max.Protein.2)
+
+colnames(Max.Protein.4) = c("Entry", "tg.1", "tg.2")
+
+
+
+Max.Protein.4$fold = (Max.Protein.4$tg.2 - Max.Protein.4$tg.1) # Calculate log fold change for each protein. 
+- WT where positive numbers are abundant 
+
+Max.Protein.5 = merge.data.frame(FGK,Max.Protein.4, by = "Entry")
+
+abu.wt = Max.Protein.5 %>% mutate(name=strsplit(Gene.ontology.IDs, ";")) # Proper Extraction of Gene ontology terms
+abu.wt = unnest(abu.wt) # Keeping double values in single rows and duplicates
+wt = data.frame(abu.wt$name, abu.wt$fold) # Extract Gene ontologies with fold change values of proteins
+colnames(wt) = c("ID", "Fold") # Rename columns
+
+wt = wt %>% mutate(Term = Term(ID)) %>% mutate(Onto = Ontology(ID)) # Getting Gene ontology IDs using Go.Db package
+
+mf.wt = wt[wt$Onto == "MF",] # Molecular Function Extraction
+
+mf.wt = na.omit(mf.wt) # Omit rows with missing values
+
+mf.wt = mf.wt %>% mutate(match = str_extract(Term, "ATP binding|RNA binding|ribosome|nucleic acid binding|DNA binding|oxidoreductase activity|GTPase activity|kinase|translation|DNA|translation|tRNA|kinase|transferase|activity|binding|protein"))
+
+mf.wt.1 = mf.wt[mf.wt$Fold < 0, ] # Extract values less than 0 and assign with type down
+mf.wt.1$Type = "Down"
+mf.wt.2 = mf.wt[mf.wt$Fold > 0, ] # Extract values greater than 0 and assign with type up
+mf.wt.2$Type = "Up"
+
+mf = rbind(mf.wt.1, mf.wt.2) #Create new data frame
+mf = data.frame(mf$match, mf$Type) # Create new type 
+mf = table(mf) # Create Frequency Table for each terms according to up and down
+
+mf = data.frame(mf) # Conversion to data frame format
+
+mf$Percent = (mf$Freq / sum(mf$Freq))*100 # Percentages
+
+New.mf = mf[mf$mf.Type == "Down",] # For Molecular functions assigned as down where down means decrease in proteins get the negative percentages to get an up and down bar chart for each terms
+New.mf$Percent = (New.mf$Percent)*-1
+
+New.mf.1 = mf[mf$mf.Type == "Up",] # Extraction of Up terms
+
+MF.bar.chart = rbind(New.mf,New.mf.1)
+
+ggplot(MF.bar.chart, aes(x = MF.bar.chart$mf.match, y = MF.bar.chart$Percent, fill = MF.bar.chart$mf.Type)) + geom_bar(stat = "identity") + xlab("") + ylab("Percentage of Proteins") + ggtitle("Percentage of Proteins Abundant and Decreased in Mutant  By GO Terms") + scale_fill_discrete(name = "Legend") + scale_x_discrete(guide = guide_axis(n.dodge=2))
+
+write.csv(MF.bar.chart, "MF.bar.chart.csv") # Export and Produce Image in Either Excel or Tableau (Highly Recommended )
+
+BP.wt = wt[wt$Onto == "BP",] # Biological Function Extraction
+
+BP.wt = na.omit(BP.wt) # Omit rows with missing values
+
+BP.wt = BP.wt %>% mutate(match = str_extract(Term, "transport|catabolic|biosynthetic|tRNA|translation|transcription|signal|metabolic|assimilation|assembly|rRNA|RNA|ribosomal|ribosome|regulation|protein|mRNA|cell"))  # Biological Terms
+
+BP.wt.1 = BP.wt[BP.wt$Fold < 0, ] # Extract values less than 0 and assign with type down
+BP.wt.1$Type = "Down"
+BP.wt.2 = BP.wt[BP.wt$Fold > 0, ] # Extract values greater than 0 and assign with type up
+BP.wt.2$Type = "Up"
+
+BP = rbind(BP.wt.1, BP.wt.2) #Create new data frame
+BP = data.frame(BP$match, BP$Type) # Create new type 
+BP = table(BP) # Create Frequency Table for each terms according to up and down
+
+BP = data.frame(BP) # Conversion to data frame format
+
+BP$Percent = (BP$Freq / sum(BP$Freq))*100 # Percentages
+
+New.BP = BP[BP$BP.Type == "Down",] # For Molecular functions assigned as down where down means decrease in proteins get the negative percentages to get an up and down bar chart for each terms
+New.BP$Percent = (New.BP$Percent)*-1
+
+New.BP.1 = BP[BP$BP.Type == "Up",] # Extraction of Up terms
+
+BP.bar.chart = rbind(New.BP,New.BP.1)
+
+View(BP.bar.chart)
+
+ggplot(BP.bar.chart, aes(x = BP.bar.chart$BP.match, y = BP.bar.chart$Percent, fill = BP.bar.chart$BP.Type)) + geom_bar(stat = "identity")  + xlab("") + ylab("Percentage of Proteins") + ggtitle("Percentage of Proteins Abundant and Decreased in Mutant  By GO Terms") + scale_fill_discrete(name = "Legend") + scale_x_discrete(guide = guide_axis(n.dodge=2))
+
+
+CC.wt = wt[wt$Onto == "CC",] # cell component Function Extraction
+
+CC.wt = CC.wt %>% mutate(match = str_extract(Term, "transport|catabolic|biosynthetic|tRNA|translation|transcription|signal|metabolic|assimilation|assembly|rRNA|RNA|ribosomal|ribosome|regulation|protein|mRNA|cell|cytoplasm|membrane|integral component of membrane|endoplasmic reticulum|proteasome complex|nucleosome|complex|nucleus|signal|Golgi|nucleolus|nucleolus|mitochondrion|chromosome")) # Biological Terms
+
+CC.wt = na.omit(CC.wt) # Omit rows with missing values
+
+View(CC.wt)
+
+CC.wt.1 = CC.wt[CC.wt$Fold < 0, ] # Extract values less than 0 and assign with type down
+CC.wt.1$Type = "Down"
+CC.wt.2 = CC.wt[CC.wt$Fold > 0, ] # Extract values greater than 0 and assign with type up
+CC.wt.2$Type = "Up"
+
+CC = rbind(CC.wt.1, CC.wt.2) #Create new data frame
+CC = data.frame(CC$match, CC$Type) # Create new type 
+CC = table(CC) # Create Frequency Table for each terms according to up and down
+
+CC = data.frame(CC) # Conversion to data frame format
+
+CC$Percent = (CC$Freq / sum(CC$Freq))*100 # Percentages
+
+New.CC= CC[CC$CC.Type == "Down",] # For Molecular functions assigned as down where down means decrease in proteins get the negative percentages to get an up and down bar chart for each terms
+New.CC$Percent = (New.CC$Percent)*-1
+
+New.CC.1 = CC[CC$CC.Type == "Up",] # Extraction of Up terms
+
+CC.bar.chart = rbind(New.CC,New.CC.1) # Production of data frame
+
+ggplot(CC.bar.chart, aes(x = CC.bar.chart$CC.match, y = CC.bar.chart$Percent, fill = CC.bar.chart$CC.Type)) + geom_bar(stat = "identity")  + xlab("") + ylab("Percentage of Proteins") + ggtitle("Percentage of Proteins Abundant and Decreased in Mutant  By GO Terms") + scale_fill_discrete(name = "Legend") + scale_x_discrete(guide = guide_axis(n.dodge=2))
+
