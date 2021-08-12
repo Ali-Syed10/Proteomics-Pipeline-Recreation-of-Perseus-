@@ -1,0 +1,110 @@
+#####
+
+Unique.Peptide.Distribution <- function(Data) {
+  
+  Data = Data$Unique.peptides
+  Data = as.numeric(Data)
+  Data = na.omit(Data)
+  Data = plot(density(Data), main = "Unique Peptide Distribution", ylab = "Unique Peptide Density", xlab = "Unique Peptide Count", type = "h")
+}
+
+# Function 1
+
+
+#### Function 2
+
+Sequence.Length.Distribution <- function(Data) {
+  ggplot(Data, aes(x = Sequence.length)) + geom_histogram(color="black", fill="lightblue",linetype="dashed") + xlab("Sequence Lengths") + ylab("Frequency") 
+}
+
+### Function 3
+
+Score.Distribution <- function(Data) {
+  
+  Data = Data$Score
+  hist(Data)
+}
+
+# Function 4
+
+Seq.Coverage.Comparison <- function(Data) {
+  
+  Pr = Data[ , grepl( "Sequence.coverage." , names(Data) ) ]
+  colnames(Pr)[1] <- "Best.Coverage"
+  Col = colnames(Pr)
+  dat.m <- melt(Pr,id.vars= Col, measure.vars= Col)
+  plot = ggplot(dat.m, aes(x=variable, y=value))+ geom_boxplot(aes(x=variable, y=value, fill=variable), outlier.colour="red", outlier.shape=8, outlier.size=4) + stat_summary(fun=mean, geom="point", shape=16, size=4) + ggtitle("Comparison of Sequence Coverages Across Samples") + theme(axis.title.x=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank()) + ylab("Sequence Coverage Values") + scale_fill_discrete(name = "Samples") 
+  return(plot) 
+   }                                
+
+
+#Function 5
+
+LFQ.Comparison <- function(Data) {
+  
+  Pr = Data[ , grepl( "LFQ.intensity." , names(Data) ) ]
+  Pr = as.data.frame(apply(Pr, 2, function(x)log2(x)))
+  Col = colnames(Pr)
+  dat.m <- melt(Pr,id.vars= Col, measure.vars= Col)
+  ggplot(dat.m, aes(x=variable, y=value))+ geom_boxplot(aes(x=variable, y=value, fill=variable), outlier.colour="black", outlier.shape=1, outlier.size=4) + stat_summary(fun=mean, geom="point", shape=16, size=4) + ggtitle("Comparison of LFQ Intensity Across Samples") + theme(axis.title.x=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank()) + ylab("Sequence Coverage Values") + scale_fill_discrete(name = "Samples") 
+}        
+
+# Function 6
+
+Prot.stat = function(WTDF, MTDF) {
+  #Prot = Complete.Data[ , grepl(c("Majority.protein.IDs") , names(Complete.Data) ) ]
+  Sample.A = apply(WTDF, 1, function(x) mean(x))
+  Sample.B = apply(MTDF, 1, function(x) mean(x))
+  log.fold.change = Sample.B - Sample.A
+  Ttttest = row_t_equalvar( WTDF,MTDF)
+  P.val = Ttttest$pvalue
+  P.ad = p.adjust(P.val, method = "fdr")
+  P.val.log = -1*(log10(P.val))
+  Final = cbind(Sample.A, Sample.B, log.fold.change, P.val.log, P.val, P.ad)
+  Final = as.data.frame(Final)
+  return(Final)
+}
+
+
+# Function 7 - cell componenet visualization
+
+Cell.reg.viz = function(GO.Data , Results) {
+  p = GO.Data
+  name = colnames(GO.Data)
+  New.data = Results[ , grepl(c("type|Protein_ID") , names(Results) ) ]
+  p = p
+  p = merge.data.frame(p, New.data, by = "Protein_ID")
+  p = apply(p,1,function(x)str_remove_all(x, "[GO:0000-9]"))
+  p = t(p)
+  p[p == ""] <- "Undefined"
+  p = as.data.frame(p)
+  colnames(p) = c(name, "type")
+  ggplot(p, aes(y = Gene.ontology..cellular.component., color = type)) + geom_bar()
+}
+
+# Function 8  - normal distribution imputation
+
+impute_normal <- function(object, width=0.3, downshift=1.8, seed=100) {
+  Pr = object[ , -grep( "LFQ.intensity." , names(object) ) ]
+  object = object[ , grep( "LFQ.intensity." , names(object) ) ] 
+  object = apply(object, 2, function(x)log2(x))
+  
+  if (!is.matrix(object)) object <- as.matrix(object)
+  mx <- max(object, na.rm=TRUE)
+  mn <- min(object, na.rm=TRUE)
+  if (mx - mn > 20) warning("Please make sure the values are log-transformed")
+  
+  set.seed(seed)
+  object <- apply(object, 2, function(temp) {
+    temp[!is.finite(temp)] <- NA
+    temp_sd <- stats::sd(temp, na.rm=TRUE)
+    temp_mean <- mean(temp, na.rm=TRUE)
+    shrinked_sd <- width * temp_sd   # shrink sd width
+    downshifted_mean <- temp_mean - downshift * temp_sd   # shift mean of imputed values
+    n_missing <- sum(is.na(temp))
+    temp[is.na(temp)] <- stats::rnorm(n_missing, mean=downshifted_mean, sd=shrinked_sd)
+    temp
+  })
+  object = cbind(Pr,object)
+  return(object)
+}
